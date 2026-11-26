@@ -26,33 +26,58 @@ def decodificar(raw: bytes, max_lado: int) -> np.ndarray:
 def codificar_jpg(bgr: np.ndarray, calidad: int = 90) -> bytes:
     return cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, calidad])[1].tobytes()
 
-
 def mascara_trabajo(mascara: np.ndarray, escudo: np.ndarray, tipo_corte: TipoCorte) -> np.ndarray:
-    """Zona que el modelo puede redibujar según el cambio pedido; nunca incluye las facciones."""
+    """Zona que el modelo puede redibujar según el cambio pedido; protege el centro facial pero libera el contorno."""
     h, w = mascara.shape[:2]
-    if tipo_corte == TipoCorte.CONSERVAR:      # solo color: exactamente el cabello actual
-        zona = cv2.dilate(mascara, np.ones((5, 5), np.uint8))
-    elif tipo_corte == TipoCorte.LARGO:        # el cabello crece: se abre espacio hacia hombros
-        zona = cv2.dilate(mascara, np.ones((21, 21), np.uint8))
-        fy, fx = np.where(escudo > 0)
+    # Erosiona el escudo facial para liberar línea del cabello, patillas y bordes de mandíbula
+    escudo_interno = cv2.erode(escudo, np.ones((15, 15), np.uint8), iterations=1)
+
+    if tipo_corte == TipoCorte.CONSERVAR:      # solo color/textura: cabello actual con margen suave
+        zona = cv2.dilate(mascara, np.ones((11, 11), np.uint8))
+    elif tipo_corte == TipoCorte.LARGO:        # el cabello crece: caída lateral en herradura hacia hombros
+        zona = cv2.dilate(mascara, np.ones((25, 25), np.uint8))
+        fy, fx = np.where(escudo_interno > 0)
         ys, xs = np.where(mascara > 0)
         caja = np.zeros_like(mascara)
         if len(fx):
             ancho = fx.max() - fx.min()
-            x0, x1 = max(0, int(fx.min() - ancho * 0.65)), min(w, int(fx.max() + ancho * 0.65))
-            y0 = max(0, int((ys.min() if len(ys) else fy.min()) - h * 0.04))
-            y1 = min(h, int(fy.max() + (fy.max() - fy.min()) * 1.15))
+            alto = fy.max() - fy.min()
+            cx = (fx.min() + fx.max()) // 2
+            x0 = max(0, int(fx.min() - ancho * 0.80))
+            x1 = min(w, int(fx.max() + ancho * 0.80))
+            y0 = max(0, int((ys.min() if len(ys) else fy.min()) - h * 0.06))
+            y1 = min(h, int(fy.max() + alto * 1.30))
             caja[y0:y1, x0:x1] = 255
+            # Deja libre el centro del cuello/pecho debajo del mentón para que el pelo caiga a los lados
+            cuello_y0 = min(h, int(fy.max() + alto * 0.12))
+            cuello_x0 = max(0, int(cx - ancho * 0.28))
+            cuello_x1 = min(w, int(cx + ancho * 0.28))
+            caja[cuello_y0:y1, cuello_x0:cuello_x1] = 0
         elif len(xs):
-            x0, x1 = max(0, int(xs.min() - w * 0.12)), min(w, int(xs.max() + w * 0.12))
-            caja[max(0, int(ys.min() - h * 0.04)):min(h, int(ys.max() + h * 0.35)), x0:x1] = 255
+            x0, x1 = max(0, int(xs.min() - w * 0.15)), min(w, int(xs.max() + w * 0.15))
+            caja[max(0, int(ys.min() - h * 0.05)):min(h, int(ys.max() + h * 0.35)), x0:x1] = 255
         zona = np.maximum(zona, caja)
     elif tipo_corte == TipoCorte.MEDIO:
-        zona = cv2.dilate(mascara, np.ones((35, 25), np.uint8))
-    else:                                       # corto o calvo: se reduce dentro de la silueta actual
-        zona = cv2.dilate(mascara, np.ones((25, 25), np.uint8))
-    return cv2.bitwise_and(zona, cv2.bitwise_not(escudo))
+        zona = cv2.dilate(mascara, np.ones((39, 31), np.uint8))
+    else:                                       # corto o calvo: cubre todo el pelo largo para borrarlo
+        zona = cv2.dilate(mascara, np.ones((35, 35), np.uint8))
 
+    return cv2.bitwise_and(zona, cv2.bitwise_not(escudo_interno))
+
+
+def preparar_lienzo_corte(bgr: np.ndarray, mascara_pelo: np.ndarray, escudo: np.ndarray,
+                          tipo_corte: TipoCorte) -> np.ndarray:
+    """Borra el cabello largo previo antes de enviar a Colab cuando se pide un corte corto o calvo."""
+    if tipo_corte not in (TipoCorte.CORTO, TipoCorte.MEDIO, TipoCorte.CALVO):
+        return bgr
+    escudo_interno = cv2.erode(escudo, np.ones((15, 15), np.uint8), iterations=1)
+    a_borrar = cv2.dilate(mascara_pelo, np.ones((15, 15), np.uint8))
+    a_borrar = cv2.bitwise_and(a_borrar, cv2.bitwise_not(escudo_interno))
+    fy = np.where(escudo_interno > 0)[0]
+    if len(fy) and tipo_corte == TipoCorte.MEDIO:
+        corte_y = int(fy.max() + (fy.max() - fy.min()) * 0.15)
+        a_borrar[:corte_y, :] = 0
+    return cv2.inpaint(bgr, a_borrar, inpaintRadius=7, flags=cv2.INPAINT_TELEA)
 
 def caja_recorte(zona: np.ndarray, margen: float = 0.15) -> tuple[int, int, int, int]:
     """Recorte cuadrado alrededor de la zona a editar: el modelo trabaja a 512 px sin deformar la foto."""
@@ -100,18 +125,20 @@ def recolorear(bgr: np.ndarray, mascara: np.ndarray, hex_color: str, degradado: 
     obj = cv2.cvtColor(np.uint8([[[b, g, r]]]), cv2.COLOR_BGR2LAB)[0, 0].astype(np.float32)
     lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
     cabello = mascara > 0
+    if not np.any(cabello):
+        return bgr
     L = lab[..., 0]
     base = cv2.GaussianBlur(L, (0, 0), 3.0)
     detalle = L - base
-    L2 = np.clip(obj[0] + (base - base[cabello].mean()) * 0.9 + detalle * 1.15, 0, 255)
-    brillo = np.clip((L2 - 170.0) / 60.0, 0, 1)
-    peso = 0.88 * (1 - 0.5 * brillo)
+    L2 = np.clip(obj[0] + (base - base[cabello].mean()) * 0.85 + detalle * 1.15, 15, 245)
+    brillo = np.clip((L2 - 185.0) / 60.0, 0, 1)
+    peso = 0.92 * (1 - 0.35 * brillo)
     a2 = lab[..., 1] * (1 - peso) + obj[1] * peso
     b2 = lab[..., 2] * (1 - peso) + obj[2] * peso
     out = cv2.cvtColor(np.clip(np.dstack([L2, a2, b2]), 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
     if degradado:
         ys = np.where(cabello)[0]
         t = np.clip((np.arange(bgr.shape[0], dtype=np.float32) - ys.min()) / max(1, ys.max() - ys.min()), 0, 1)
-        k = (0.35 + 0.65 * t * t * (3 - 2 * t))[:, None, None]
+        k = (0.30 + 0.70 * t * t * (3 - 2 * t))[:, None, None]
         out = (bgr.astype(np.float32) * (1 - k) + out.astype(np.float32) * k).astype(np.uint8)
     return out

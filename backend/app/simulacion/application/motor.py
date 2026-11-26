@@ -65,8 +65,10 @@ class MotorSimulacion:
         restante = presupuesto_s - (time.perf_counter() - inicio) - RESERVA_S
 
         if self.inpainter.disponible and restante >= MIN_INPAINT_S:
-            x0, y0, x1, y1 = imagen.caja_recorte(zona)
-            recorte, zona_rec = foto.bgr[y0:y1, x0:x1], zona[y0:y1, x0:x1]
+            lienzo = imagen.preparar_lienzo_corte(foto.bgr, foto.mascara, foto.escudo, espec.tipo_corte)
+            margen = 0.28 if espec.tipo_corte == TipoCorte.LARGO else 0.15
+            x0, y0, x1, y1 = imagen.caja_recorte(zona, margen=margen)
+            recorte, zona_rec = lienzo[y0:y1, x0:x1], zona[y0:y1, x0:x1]
             gen = self.inpainter.generar(imagen.a_tamano_modelo(recorte), imagen.a_tamano_modelo(zona_rec, True),
                                          prompt_final(espec), negative_prompt(espec.tipo_corte), restante)
             if gen is not None:

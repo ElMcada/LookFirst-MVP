@@ -25,16 +25,20 @@ COLORES = [
     ("canas", "natural salt and pepper gray", "#9EA2A8"), ("gris", "silver gray", "#B9BCC2"),
 ]
 CORTES = [
-    (("calvo", "rapado", "pelado", "sin pelo"), TipoCorte.CALVO, "completely bald head, cleanly shaved smooth scalp"),
-    (("buzz", "al cero", "militar"), TipoCorte.CORTO, "ultra short buzz cut, clean fade on the sides"),
-    (("pixie", "duendecillo", "muy corto"), TipoCorte.CORTO, "chic textured pixie haircut, short cropped layered hair around ears and nape"),
-    (("long bob", "media melena", "lob"), TipoCorte.MEDIO, "shoulder-length wavy long bob haircut, textured ends, natural volume"),
-    (("bob", "carré", "melena corta"), TipoCorte.MEDIO, "classic chin-length layered bob haircut framing the jawline"),
-    (("flequillo", "cerquillo", "bangs"), TipoCorte.MEDIO, "hairstyle with soft curtain bangs framing the forehead and cheekbones"),
-    (("capas", "degrafilado", "layered"), TipoCorte.LARGO, "long layered haircut falling past the shoulders with face-framing layers"),
-    (("ondas", "ondulado", "rizos", "waves"), TipoCorte.LARGO, "long flowing wavy hair falling over the shoulders, soft voluminous curls"),
-    (("largo", "melena larga", "long hair"), TipoCorte.LARGO, "long straight silky hair extending past the shoulders"),
-    (("corto", "degradado", "fade"), TipoCorte.CORTO, "modern short tapered haircut, textured top and clean faded sides"),
+    (("calvo", "rapado", "pelado", "sin pelo"), TipoCorte.CALVO, "completely bald head, cleanly shaved smooth scalp, bare neck and shoulders"),
+    (("buzz", "al cero", "militar"), TipoCorte.CORTO, "ultra short buzz cut, clean fade on the sides, bare neck"),
+    (("pixie", "duendecillo", "muy corto"), TipoCorte.CORTO, "chic textured short pixie haircut above the ears, bare neck and shoulders"),
+    (("corto", "degradado", "fade"), TipoCorte.CORTO, "modern short tapered haircut above the ears, clean faded sides, bare neck"),
+    (("long bob", "media melena", "lob"), TipoCorte.MEDIO, "shoulder-length long bob haircut, clean neck below shoulders"),
+    (("bob", "carré", "melena corta"), TipoCorte.MEDIO, "classic chin-length bob haircut, bare neck and shoulders"),
+    (("flequillo", "cerquillo", "bangs"), TipoCorte.MEDIO, "hairstyle with soft curtain bangs framing the forehead"),
+    (("capas", "degrafilado", "layered"), TipoCorte.LARGO, "long layered haircut flowing past the shoulders"),
+    (("largo", "melena larga", "long hair"), TipoCorte.LARGO, "long hair extending past the shoulders"),
+]
+TEXTURAS = [
+    (("ondas", "ondulado", "waves"), "defined wavy hair with soft waves"),
+    (("rizos", "rizado", "crespo", "curly"), "defined curly hair with voluminous curls"),
+    (("lacio", "liso", "planchado", "straight"), "sleek straight silky hair"),
 ]
 PALABRAS_DEGRADADO_COLOR = ("balayage", "ombre", "ombré", "mechas", "californianas", "reflejos", "degradado de color")
 
@@ -52,15 +56,19 @@ class InterpretePalabrasClave:
                 corte = (tipo, desc)
                 break
 
+        textura = next((desc for claves, desc in TEXTURAS if any(k in t for k in claves)), None)
+
         if corte and corte[0] == TipoCorte.CALVO:
             return EspecificacionLook(prompt_en=corte[1], tipo_corte=TipoCorte.CALVO, fuente=FuentePrompt.PALABRAS_CLAVE)
-        if corte:
-            color_desc = f"vibrant dyed {color[0]} hair color" if color else "natural hair color"
-            return EspecificacionLook(prompt_en=f"{corte[1]}, {color_desc}", tipo_corte=corte[0],
+        if corte or textura:
+            tipo = corte[0] if corte else TipoCorte.CONSERVAR
+            base_desc = ", ".join(filter(None, [corte[1] if corte else "same hair length", textura]))
+            color_desc = f"rich saturated dyed {color[0]} hair color, uniform color from roots to tips" if color else "natural hair color"
+            return EspecificacionLook(prompt_en=f"{base_desc}, {color_desc}", tipo_corte=tipo,
                                       fuente=FuentePrompt.PALABRAS_CLAVE, color_hex=color and color[1], degradado=degradado)
         if color:
-            estilo = "balayage gradient from natural roots to colored ends" if degradado else "fully colored strands"
+            estilo = "balayage gradient from natural roots to colored ends" if degradado else "uniform full hair color from roots to tips"
             return EspecificacionLook(
-                prompt_en=f"{color[0]} hair color, saturated salon hair dye, {estilo}, same haircut and length",
+                prompt_en=f"{color[0]} hair color, rich saturated salon hair dye, {estilo}, same haircut and length",
                 tipo_corte=TipoCorte.CONSERVAR, fuente=FuentePrompt.PALABRAS_CLAVE, color_hex=color[1], degradado=degradado)
         return None

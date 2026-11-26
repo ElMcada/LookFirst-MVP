@@ -5,7 +5,7 @@ import requests
 
 
 class InpainterColab:
-    def __init__(self, url: str, pasos: int = 15):
+    def __init__(self, url: str, pasos: int = 18):
         self.url, self.pasos = url.rstrip("/"), pasos
         self._http = requests.Session()  # reutiliza la conexión TLS: ahorra ~0.3 s por simulación
 

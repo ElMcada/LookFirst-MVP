@@ -48,7 +48,8 @@ def generar(img, msk, prompt, negative, steps):
     img, msk = multiplo8(img), multiplo8(msk)
     with lock, torch.inference_mode():
         return pipe(prompt=prompt, negative_prompt=negative, image=img, mask_image=msk,
-                    width=img.width, height=img.height, num_inference_steps=steps, guidance_scale=7.5).images[0]
+                    width=img.width, height=img.height, num_inference_steps=steps,
+                    strength=0.90, guidance_scale=8.5).images[0]
 
 
 app = FastAPI()

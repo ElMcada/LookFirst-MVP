@@ -14,9 +14,14 @@ NEGATIVOS = {
 
 
 def prompt_final(espec: EspecificacionLook) -> str:
-    if espec.tipo_corte == TipoCorte.CALVO:
-        return f"{espec.prompt_en}, natural scalp skin matching the face, salon photography, high quality"
-    return f"{espec.prompt_en}, realistic hair texture, natural salon lighting, salon photography, high quality"
+    refuerzos = {
+        TipoCorte.LARGO: "(long voluminous hair falling past shoulders:1.35), (cascading strands framing face and neck:1.25), ",
+        TipoCorte.MEDIO: "(shoulder-length medium haircut:1.3), (clean bare neck below shoulders:1.2), ",
+        TipoCorte.CORTO: "(short cropped haircut above the ears:1.35), (completely bare neck and shoulders:1.3), ",
+        TipoCorte.CALVO: "(completely bald head, smooth shaved scalp:1.4), (bare neck and shoulders:1.3), ",
+    }
+    prefijo = refuerzos.get(espec.tipo_corte, "")
+    return f"{prefijo}{espec.prompt_en}, photorealistic salon portrait photography, natural hair texture, realistic lighting"
 
 
 def negative_prompt(tipo_corte: TipoCorte) -> str:
