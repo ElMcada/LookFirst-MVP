@@ -1,0 +1,115 @@
+<div class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Consulta</p>
+      <h1>{{ store.activa() ? 'Consulta en curso' : 'Nueva consulta' }}</h1>
+    </div>
+    @if (store.activa()) {
+      <div class="row">
+        <button class="btn btn-danger" [disabled]="!libre()" (click)="revocar()">Retirar consentimiento</button>
+        <button class="btn btn-primary" [disabled]="!libre()" (click)="finalizar()"><lf-icon name="check" /> Finalizar consulta</button>
+      </div>
+    }
+  </header>
+
+  <lf-stepper [paso]="store.paso()" />
+
+  @if (!store.activa()) {
+    <section class="card inicio">
+      <span class="inicio-icono"><lf-icon name="sparkles" [size]="26" /></span>
+      <h2>Muestra el resultado antes del primer corte</h2>
+      <p class="muted">Toma una foto del cliente, recibe recomendaciones según la forma de su rostro y prueba cortes y tintes del catálogo o pedidos por voz.</p>
+      <button class="btn btn-primary btn-lg" [disabled]="!libre()" (click)="iniciar()">Iniciar consulta</button>
+      <p class="subtle privacidad"><lf-icon name="shield" [size]="15" /> La foto nunca se guarda: se elimina al terminar la consulta.</p>
+    </section>
+  }
+
+  <div class="espacio" [hidden]="!store.activa()">
+    <section class="principal">
+      <lf-escenario [modo]="modo()" [fotoUrl]="store.fotoUrl()" [lookUrl]="store.lookActual()?.imagenUrl ?? null" [ocupado]="store.ocupado()" />
+
+      <div class="barra">
+        @if (modo() === 'camara') {
+          <button class="btn btn-primary" [disabled]="!libre()" (click)="capturar()"><lf-icon name="camera" /> Capturar foto</button>
+        } @else {
+          <button class="btn btn-secondary" [disabled]="!libre()" (click)="abrirCamara()">
+            <lf-icon [name]="store.fotoUrl() ? 'refresh' : 'camera'" /> {{ store.fotoUrl() ? 'Nueva foto' : 'Activar cámara' }}
+          </button>
+        }
+        <label class="btn btn-secondary" [class.deshabilitado]="!libre()">
+          <lf-icon name="upload" /> Subir foto
+          <input type="file" accept="image/*" class="sr-only" [disabled]="!libre()" (change)="subir($event)" />
+        </label>
+      </div>
+
+      @if (store.lookActual(); as look) {
+        <div class="look card">
+          <div class="look-info">
+            <span class="subtle">{{ origenTexto[look.origen] }}</span>
+            <strong>{{ look.etiqueta }}</strong>
+          </div>
+          <span class="badge" [class.ok]="cumpleLatencia(look)" [class.warn]="!cumpleLatencia(look)"
+                [title]="'Meta: ' + limite + ' s o menos'">
+            <lf-icon name="clock" [size]="13" /> {{ look.latenciaS.toFixed(1) }} s
+          </span>
+          <span class="badge" [class.accent]="look.modo === 'ia_generativa'">
+            {{ look.modo === 'ia_generativa' ? 'IA generativa' : 'Respaldo local' }}
+          </span>
+          <span class="spacer"></span>
+          @if (look.id === store.elegidoId()) {
+            <span class="badge ok"><lf-icon name="check" [size]="13" /> Look elegido</span>
+          } @else {
+            <button class="btn btn-accent btn-sm" [disabled]="!libre()" (click)="elegir(look)"><lf-icon name="check" [size]="16" /> Elegir este look</button>
+          }
+        </div>
+        @if (look.aviso) {
+          <p class="aviso"><lf-icon name="info" [size]="16" /> {{ look.aviso }}</p>
+        }
+      }
+
+      <lf-historial [looks]="store.looks()" [actualId]="store.lookActual()?.id ?? null" [elegidoId]="store.elegidoId()"
+                    [deshabilitado]="!libre()" (ver)="ver($event)" />
+    </section>
+
+    <aside class="lateral">
+      <section class="card card-pad">
+        <p class="eyebrow">Análisis facial</p>
+        @if (store.analisis(); as a) {
+          <h2 class="forma">Rostro {{ a.forma_rostro }}</h2>
+          <p class="muted">{{ a.razon }}</p>
+          <dl class="metricas">
+            <div><dt>Alto / ancho</dt><dd>{{ a.metricas.alto_ancho }}</dd></div>
+            <div><dt>Mandíbula / pómulos</dt><dd>{{ a.metricas.mandibula_pomulos }}</dd></div>
+            <div><dt>Frente / pómulos</dt><dd>{{ a.metricas.frente_pomulos }}</dd></div>
+          </dl>
+        } @else {
+          <p class="muted vacio">Captura una foto frontal para detectar la forma del rostro.</p>
+        }
+      </section>
+
+      <section class="card card-pad">
+        <div class="titulo-seccion"><h2>Recomendados</h2><span class="subtle">del catálogo del salón</span></div>
+        @if (store.analisis(); as a) {
+          <div class="lista">
+            @for (e of a.recomendaciones; track e.id) {
+              <lf-estilo-item [estilo]="e" [deshabilitado]="!libre()" (elegir)="simularEstilo($event)" />
+            } @empty {
+              <p class="muted">El catálogo no tiene estilos para esta forma de rostro.</p>
+            }
+          </div>
+        } @else {
+          <div class="lista esqueleto" aria-hidden="true"><span></span><span></span><span></span></div>
+        }
+      </section>
+
+      <section class="card card-pad">
+        <div class="titulo-seccion"><h2>Pedido libre</h2><span class="subtle">texto o voz</span></div>
+        <lf-solicitud [deshabilitado]="!libre() || !store.analisis()" (pedir)="simularPedido($event)" />
+      </section>
+    </aside>
+  </div>
+</div>
+
+<lf-consentimiento />
+<lf-cierre />
+<lf-confirmacion />
