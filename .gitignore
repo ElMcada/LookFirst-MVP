@@ -1,0 +1,19 @@
+# Entornos virtuales y dependencias
+venv/
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+
+# Variables de entorno y credenciales privadas
+.env
+*.env
+
+# Archivos temporales de sesiones e imágenes biométricas
+backend/temp/
+temp/
+
+# Sistema operativo y editor
+.DS_Store
+Thumbs.db
+.vscode/
